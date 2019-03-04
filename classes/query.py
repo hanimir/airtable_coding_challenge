@@ -1,4 +1,5 @@
 import json
+import os
 
 from classes.table import Table
 from classes.exceptions import InvalidTableException
@@ -21,7 +22,7 @@ class Query:
   def load_tables(self, table_folder):
     for source in self.sources:
       table_name = source['source']
-      table_filepath = '{}/{}.table.json'.format(table_folder, table_name)
+      table_filepath = os.path.join(table_folder, '{}.table.json'.format(table_name))
       try:
         with open(table_filepath, 'rU') as table_file:
           table = json.load(table_file)
