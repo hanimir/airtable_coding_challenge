@@ -25,11 +25,10 @@ class Query:
         with open(table_filepath, 'rU') as table_file:
           table = json.load(table_file)
           self.tables.append(Table(name=source['as'], columns=table[0], data=table[1:]))
-      except:
-        raise
+      except Exception:
+        import pdb; pdb.set_trace()
 
   def evaluate(self):
-    joined_table = Table.join_tables(self.tables)
-    filtered_table = joined_table.where(self.where)
-    import pdb; pdb.set_trace()
-    pass
+    return Table.join_tables(self.tables) \
+                .where(self.where)        \
+                .select(self.select)

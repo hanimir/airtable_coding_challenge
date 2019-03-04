@@ -1,5 +1,11 @@
 import itertools
 
+from classes.exceptions import (AmbiguousColumnException,
+                                InvalidColumnException,
+                                InvalidOperandTypesException,
+                                InvalidTableException)
+from utils import operator_to_function
+
 
 class Table:
 
@@ -11,17 +17,6 @@ class Table:
       (column[0], i) for i, column in enumerate(self.columns)
     )
 
-  def where(self, conditions):
-    filtered_rows = []
-    for row in self.data:
-      for condition in conditions:
-        import pdb; pdb.set_trace()
-        pass
-
-      filtered_rows.append(row)
-
-    return Table(self.name, self.columns, filtered_rows)
-
   def get_columns_with_table_name_prefix(self):
     prefixed_columns = []
     for column in self.columns:
@@ -31,23 +26,98 @@ class Table:
 
     return prefixed_columns
 
-  def join(self, table):
-    joined_columns = self.get_columns_with_table_name_prefix() + table.get_columns_with_table_name_prefix()
-    joined_data = [
-      self_data + table_data for self_data, table_data in itertools.product(self.data, table.data)
+  def rename_column(self, current_name, new_name):
+    i = self.index_of_column[current_name]
+    new_columns = self.columns[:i] + [[new_name, self.columns[i][1]]] + self.columns[i + 1:]
+    return Table(self.name, new_columns, self.data)
+
+  def remove_column(self, column):
+    if column not in self.index_of_column:
+      raise Exception('Column {} does not exist.'.format(column))
+
+    i = self.index_of_column[column]
+    new_table_name = '{table_name}-{column_name}'.format(
+      table_name=self.name,
+      column_name=column
+    )
+    new_columns = self.columns[:i] + self.columns[i + 1:]
+    new_data = [
+      row[:i] + row[i + 1:] for row in self.data
     ]
-    return Table('{}.{}'.format(self.name, table.name), joined_columns, joined_data)
 
-  @staticmethod
-  def join_tables(tables):
-    joined_table = tables[0]
+    return Table(new_table_name, new_columns, new_data)
 
-    for table in tables[1:]:
-      joined_table = joined_table.join(table)
+  def get_column_name(self, table_name, column_name):
+    if table_name:
+      column = '{}.{}'.format(table_name, column_name)
+      if column not in self.index_of_column:
+        raise Exception('ERROR: Unknown table name "{}".'.format(table_name))
 
-    return joined_table
+      return column
 
-  def __str__(self):
+    matching_columns = [
+      column for column in self.index_of_column.keys() if column.split('.')[-1] == column_name
+    ]
+
+    if len(matching_columns) > 1:
+      raise Exception('Ambiguous column name {}'.format(column_name))
+
+    return matching_columns[0]
+
+  def get_condition_value_and_type(self, row, condition):
+    if 'literal' in condition:
+      literal = condition['literal']
+      return literal, 'str' if isinstance(literal, (str, unicode)) else 'int'
+
+    table_name = condition['column']['table']
+    column_name = condition['column']['name']
+    column = self.get_column_name(table_name, column_name)
+    column_index = self.index_of_column[column]
+    return row[column_index], self.columns[column_index][1]
+
+  def where(self, conditions):
+    filtered_rows = []
+    for row in self.data:
+      row_meets_all_conditions = True
+      for condition in conditions:
+        operator_string = condition['op']
+        operator = operator_to_function.get(operator_string, None)
+        if not operator:
+          raise Exception('Invalid operator {}'.format(operator_string))
+
+        left_value, left_type = self.get_condition_value_and_type(row, condition['left'])
+        right_value, right_type = self.get_condition_value_and_type(row, condition['right'])
+
+        if not self.row_meets_condition(left_value, left_type, right_value, right_type, operator):
+          row_meets_all_conditions = False
+          break
+
+      if row_meets_all_conditions:
+        filtered_rows.append(row)
+
+    return Table(self.name, self.columns, filtered_rows)
+
+  def select(self, columns):
+    result = self
+
+    columns_to_remove = set(self.index_of_column.keys())
+    for column_dict in columns:
+      table_name = column_dict['column']['table']
+      column_name = column_dict['column']['name']
+      column = self.get_column_name(table_name, column_name)
+      result = result.rename_column(column, column_dict['as'])
+      columns_to_remove.remove(column)
+
+    for column in columns_to_remove:
+      result = result.remove_column(column)
+
+    return result
+
+  def write(self, output_file):
+    with open(output_file, 'w') as output:
+      output.write(str(self))
+
+  def pretty_print(self):
     output = '\n'
     output += ' '.join([column[0] for column in self.columns])
     for row in self.data:
@@ -56,3 +126,49 @@ class Table:
         output += str(item) + ' '
 
     return output
+
+  def __str__(self):
+    output = '[\n'
+
+    output += '    {},\n'.format([
+      [str(item) for item in column] for column in self.columns
+    ])
+
+    for i, row in enumerate(self.data):
+      output += '    {}'.format([
+        str(item) if isinstance(item, unicode) else item for item in row
+      ])
+
+      if i < len(self.data) - 1:
+        output += ','
+
+      output += '\n'
+
+    output += ']'
+
+    return output.replace("'", '"')
+
+  @staticmethod
+  def join_tables(tables):
+    flatten = lambda lst: [item for sublist in lst for item in sublist]
+
+    joined_table_name = '.'.join([table.name for table in tables])
+
+    prefixed_columns = flatten([
+      table.get_columns_with_table_name_prefix() for table in tables
+    ])
+
+    joined_data = [
+      flatten(row) for row in itertools.product(*[table.data for table in tables])
+    ]
+
+    return Table(joined_table_name, prefixed_columns, joined_data)
+
+  @staticmethod
+  def row_meets_condition(left_value, left_type, right_value, right_type, operator):
+    if left_type != right_type:
+      raise Exception(
+        'Invalid operand types {} and {}'.format(left_type, right_type)
+      )
+
+    return operator(left_value, right_value)
