@@ -33,7 +33,7 @@ class Table:
 
   def remove_column(self, column):
     if column not in self.index_of_column:
-      raise Exception('Column {} does not exist.'.format(column))
+      raise InvalidColumnException(column)
 
     i = self.index_of_column[column]
     new_table_name = '{table_name}-{column_name}'.format(
@@ -51,23 +51,25 @@ class Table:
     if table_name:
       column = '{}.{}'.format(table_name, column_name)
       if column not in self.index_of_column:
-        raise Exception('ERROR: Unknown table name "{}".'.format(table_name))
-
+        raise InvalidTableException(table_name)
       return column
 
     matching_columns = [
       column for column in self.index_of_column.keys() if column.split('.')[-1] == column_name
     ]
 
-    if len(matching_columns) > 1:
-      raise Exception('Ambiguous column name {}'.format(column_name))
+    if len(matching_columns) == 0:
+      raise InvalidColumnException(column_name)
+    elif len(matching_columns) > 1:
+      matching_tables = [column.split('.')[0] for column in matching_columns]
+      raise AmbiguousColumnException(column_name, matching_tables)
 
     return matching_columns[0]
 
   def get_condition_value_and_type(self, row, condition):
     if 'literal' in condition:
       literal = condition['literal']
-      return literal, 'str' if isinstance(literal, (str, unicode)) else 'int'
+      return (literal, 'str') if isinstance(literal, (str, unicode)) else (literal, 'int')
 
     table_name = condition['column']['table']
     column_name = condition['column']['name']
@@ -82,15 +84,16 @@ class Table:
       for condition in conditions:
         operator_string = condition['op']
         operator = operator_to_function.get(operator_string, None)
-        if not operator:
-          raise Exception('Invalid operator {}'.format(operator_string))
 
         left_value, left_type = self.get_condition_value_and_type(row, condition['left'])
         right_value, right_type = self.get_condition_value_and_type(row, condition['right'])
 
-        if not self.row_meets_condition(left_value, left_type, right_value, right_type, operator):
-          row_meets_all_conditions = False
-          break
+        if left_type != right_type:
+          raise InvalidOperandTypesException(operator_string, left_type, right_type)
+
+        row_meets_all_conditions = (
+          row_meets_all_conditions and operator(left_value, right_value)
+        )
 
       if row_meets_all_conditions:
         filtered_rows.append(row)
@@ -163,12 +166,3 @@ class Table:
     ]
 
     return Table(joined_table_name, prefixed_columns, joined_data)
-
-  @staticmethod
-  def row_meets_condition(left_value, left_type, right_value, right_type, operator):
-    if left_type != right_type:
-      raise Exception(
-        'Invalid operand types {} and {}'.format(left_type, right_type)
-      )
-
-    return operator(left_value, right_value)

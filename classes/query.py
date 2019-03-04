@@ -1,6 +1,7 @@
 import json
 
 from classes.table import Table
+from classes.exceptions import InvalidTableException
 
 
 class Query:
@@ -19,14 +20,14 @@ class Query:
 
   def load_tables(self, table_folder):
     for source in self.sources:
+      table_name = source['source']
+      table_filepath = '{}/{}.table.json'.format(table_folder, table_name)
       try:
-        table_name = source['source']
-        table_filepath = '{}/{}.table.json'.format(table_folder, table_name)
         with open(table_filepath, 'rU') as table_file:
           table = json.load(table_file)
           self.tables.append(Table(name=source['as'], columns=table[0], data=table[1:]))
-      except Exception:
-        import pdb; pdb.set_trace()
+      except IOError:
+        raise InvalidTableException(table_name)
 
   def evaluate(self):
     return Table.join_tables(self.tables) \

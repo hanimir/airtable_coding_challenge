@@ -1,24 +1,38 @@
-class AmbiguousColumnException(Exception):
+class SQLEvaluationException(Exception):
+
+  def __init__(self, message):
+    super(SQLEvaluationException, self).__init__(message)
+
+
+class AmbiguousColumnException(SQLEvaluationException):
 
   message = 'ERROR: Column reference "{}" is ambiguous; present in multiple tables: {}.'
 
   def __init__(self, column, matching_tables):
-    pass
+    matching_tables_string = ', '.join(['"{}"'.format(table) for table in matching_tables])
+    super(AmbiguousColumnException, self).__init__(self.message.format(column, matching_tables_string))
 
-  def tables_to_string(self, tables):
-    pass
 
-class InvalidColumnException(Exception):
+class InvalidColumnException(SQLEvaluationException):
 
-  def __init__(self, message, ):
-    pass
+  message = 'ERROR: Column reference "{}" does not exist.'
 
-class InvalidOperandTypesException(Exception):
+  def __init__(self, column):
+    super(InvalidColumnException, self).__init__(self.message.format(column))
 
-  def __init__(self, message, ):
-    pass
 
-class InvalidTableException(Exception):
+class InvalidOperandTypesException(SQLEvaluationException):
 
-  def __init__(self, message, ):
-    pass
+  message = 'ERROR: Incompatible types to "{}": {} and {}.'
+
+  def __init__(self, operator, left_type, right_type):
+    super(InvalidOperandTypesException, self).__init__(
+      self.message.format(operator, left_type, right_type))
+
+
+class InvalidTableException(SQLEvaluationException):
+
+  message = 'ERROR: Unknown table name "{}".'
+
+  def __init__(self, table):
+    super(InvalidTableException, self).__init__(self.message.format(table))

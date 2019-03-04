@@ -5,14 +5,21 @@ import sys
 
 from collections import defaultdict
 
+from classes.exceptions import SQLEvaluationException
 from classes.query import Query
 
 
 def evaluate_sql(table_folder, sql_json_file, output_file):
   query = Query.load_from_file(sql_json_file)
   query.load_tables(table_folder)
-  result = query.evaluate()
-  result.write(output_file)
+  try:
+    result = query.evaluate()
+  except SQLEvaluationException as e:
+    with open(output_file, 'w') as output:
+      output.write(str(e))
+      output.write('\n')
+  else:
+    result.write(output_file)
 
 
 if __name__ == '__main__':
