@@ -14,15 +14,13 @@ class Table:
     self.columns = columns
     self.data = data
     self.index_of_column = dict(
-      (column[0], i) for i, column in enumerate(self.columns)
-    )
+      (column[0], i) for i, column in enumerate(self.columns))
 
   def get_columns_with_table_name_prefix(self):
     prefixed_columns = []
     for column in self.columns:
       prefixed_columns.append(
-        ['{}.{}'.format(self.name, column[0]), column[1]]
-      )
+        ['{}.{}'.format(self.name, column[0]), column[1]])
 
     return prefixed_columns
 
@@ -38,8 +36,7 @@ class Table:
     i = self.index_of_column[column]
     new_columns = self.columns[:i] + self.columns[i + 1:]
     new_data = [
-      row[:i] + row[i + 1:] for row in self.data
-    ]
+      row[:i] + row[i + 1:] for row in self.data]
 
     return Table(self.name, new_columns, new_data)
 
@@ -51,8 +48,7 @@ class Table:
       return column
 
     matching_columns = [
-      column for column in self.index_of_column.keys() if column.split('.')[-1] == column_name
-    ]
+      column for column in self.index_of_column.keys() if column.split('.')[-1] == column_name]
 
     if len(matching_columns) == 0:
       raise InvalidColumnException(column_name)
@@ -105,8 +101,7 @@ class Table:
         right_value = self.get_condition_value(row, condition['right'])
 
         row_meets_all_conditions = (
-          row_meets_all_conditions and operator(left_value, right_value)
-        )
+          row_meets_all_conditions and operator(left_value, right_value))
 
       if row_meets_all_conditions:
         filtered_rows.append(row)
@@ -147,13 +142,11 @@ class Table:
     output = '[\n'
 
     output += '    {},\n'.format([
-      [str(item) for item in column] for column in self.columns
-    ])
+      [str(item) for item in column] for column in self.columns])
 
     for i, row in enumerate(self.data):
       output += '    {}'.format([
-        str(item) if isinstance(item, unicode) else item for item in row
-      ])
+        str(item) if isinstance(item, unicode) else item for item in row])
 
       if i < len(self.data) - 1:
         output += ','
@@ -171,11 +164,9 @@ class Table:
     joined_table_name = '.'.join([table.name for table in tables])
 
     prefixed_columns = flatten([
-      table.get_columns_with_table_name_prefix() for table in tables
-    ])
+      table.get_columns_with_table_name_prefix() for table in tables])
 
     joined_data = [
-      flatten(row) for row in itertools.product(*[table.data for table in tables])
-    ]
+      flatten(row) for row in itertools.product(*[table.data for table in tables])]
 
     return Table(joined_table_name, prefixed_columns, joined_data)

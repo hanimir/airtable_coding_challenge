@@ -113,8 +113,7 @@ class Query:
 
     evaluated_conditions = [condition for condition, _ in conditions_on_one_table]
     conditions_left_to_evaluate = [
-      condition for condition in self.where if condition not in evaluated_conditions
-    ]
+      condition for condition in self.where if condition not in evaluated_conditions]
 
     return Table.join_tables(self.tables)           \
                 .where(conditions_left_to_evaluate) \
