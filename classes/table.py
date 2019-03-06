@@ -36,20 +36,16 @@ class Table:
       raise InvalidColumnException(column)
 
     i = self.index_of_column[column]
-    new_table_name = '{table_name}-{column_name}'.format(
-      table_name=self.name,
-      column_name=column
-    )
     new_columns = self.columns[:i] + self.columns[i + 1:]
     new_data = [
       row[:i] + row[i + 1:] for row in self.data
     ]
 
-    return Table(new_table_name, new_columns, new_data)
+    return Table(self.name, new_columns, new_data)
 
   def get_column_name(self, table_name, column_name):
     if table_name:
-      column = '{}.{}'.format(table_name, column_name)
+      column = '{}.{}'.format(table_name, column_name) if table_name != self.name else column_name
       if column not in self.index_of_column:
         raise InvalidTableException(table_name)
       return column
@@ -66,30 +62,47 @@ class Table:
 
     return matching_columns[0]
 
-  def get_condition_value_and_type(self, row, condition):
+  def get_condition_value(self, row, condition):
     if 'literal' in condition:
-      literal = condition['literal']
-      return (literal, 'str') if isinstance(literal, (str, unicode)) else (literal, 'int')
+      return condition['literal']
 
     table_name = condition['column']['table']
     column_name = condition['column']['name']
     column = self.get_column_name(table_name, column_name)
     column_index = self.index_of_column[column]
-    return row[column_index], self.columns[column_index][1]
+    return row[column_index]
+
+  def get_condition_type(self, condition):
+    if 'literal' in condition:
+      literal = condition['literal']
+      return 'str' if isinstance(literal, (str, unicode)) else 'int'
+
+    table_name = condition['column']['table']
+    column_name = condition['column']['name']
+    column = self.get_column_name(table_name, column_name)
+    column_index = self.index_of_column[column]
+    return self.columns[column_index][1]
+
+  def validate_conditions(self, conditions):
+    for condition in conditions:
+      left_type = self.get_condition_type(condition['left'])
+      right_type = self.get_condition_type(condition['right'])
+
+      if left_type != right_type:
+        raise InvalidOperandTypesException(condition['op'], left_type, right_type)
 
   def where(self, conditions):
+    self.validate_conditions(conditions)
+
     filtered_rows = []
     for row in self.data:
       row_meets_all_conditions = True
       for condition in conditions:
         operator_string = condition['op']
-        operator = operator_to_function.get(operator_string, None)
+        operator = operator_to_function[operator_string]
 
-        left_value, left_type = self.get_condition_value_and_type(row, condition['left'])
-        right_value, right_type = self.get_condition_value_and_type(row, condition['right'])
-
-        if left_type != right_type:
-          raise InvalidOperandTypesException(operator_string, left_type, right_type)
+        left_value = self.get_condition_value(row, condition['left'])
+        right_value = self.get_condition_value(row, condition['right'])
 
         row_meets_all_conditions = (
           row_meets_all_conditions and operator(left_value, right_value)
